@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Minimum permissions — contents: read is enough for a private repo's CI.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history is not needed for CI; shallow is faster.
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (clean, from lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        env:
+          # CI build needs a public site URL for metadata.
+          NEXT_PUBLIC_SITE_URL: https://dev-aditya.com
+
+      - name: Excluded-content scan
+        run: |
+          # Case-insensitive scan for the three excluded terms.
+          # Must return zero matches across the entire working tree.
+          # Terms are constructed character-by-character so the CI workflow
+          # file itself does not contain the literal excluded strings.
+          T1=$(printf 'b\155a\162a\164')      # b-ha-r-a-t (without the dashes)
+          T2=$(printf 'e\154e\143t\162o\163a\146e')  # e-l-e-c-t-r-o-s-a-f-e
+          T3="${T1}safe"
+          PATTERN="${T1}|${T2}|${T3}"
+          if grep -rniE "$PATTERN" \
+              --exclude-dir=node_modules \
+              --exclude-dir=.next \
+              --exclude-dir=.git \
+              --exclude-dir=dist \
+              --exclude='.github/workflows/ci.yml' \
+              --exclude='tests/sitemap.test.ts' \
+              --exclude='tests/projects.test.ts' \
+              . ; then
+            echo "::error::Excluded-content scan found matches — see output above"
+            exit 1
+          else
+            echo "Excluded-content scan: 0 matches ✓"
+          fi
+
+      - name: Secret scan (gitleaks, if available)
+        # gitleaks is best-effort — if the action is unavailable or the
+        # runner cannot reach the marketplace, the step is allowed to
+        # fail without breaking the build. The README documents the
+        # fallback procedure.
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

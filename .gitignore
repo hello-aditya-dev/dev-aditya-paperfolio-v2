@@ -62,6 +62,5 @@ worklog.md
 .zscripts/
 Caddyfile
 mini-services/
-tests/
 examples/
 .z-ai-configtool-results/
