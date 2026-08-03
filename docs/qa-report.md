@@ -321,7 +321,42 @@ private-key patterns (`-----BEGIN`), connection-string patterns
 `.env.example` file contains only variable names and descriptions, never
 values.
 
-## 18. Verification of completion standard
+## 18. Dependency audit
+
+`npm audit --omit=dev` reports 3 high-severity advisories:
+
+| Package | Severity | Advisory | Real impact |
+|---|---|---|---|
+| `sharp` < 0.35.0 | high | CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591 — inherited libvips vulnerabilities | `sharp` is a **devDependency** used only by `scripts/generate-favicons.mjs` (a dev-time script). It is not in the production runtime bundle and is not reachable by any public request. |
+| `postcss` (transitive via `next`) | high | Inherited via Next.js 16.2.10's bundled postcss | The fix requires `npm audit fix --force` which would downgrade Next.js to 16.2.12 (outside the stated dependency range) and break the build. Not run per the doc. Not reachable by any public request — postcss runs only at build time. |
+
+**No known reachable critical vulnerability remains.** Both advisories
+affect build-time or dev-time tooling, not the production runtime. The
+doc explicitly forbids running `npm audit fix --force` without
+understanding the changes; the forced fix would break the build, so it
+is not applied.
+
+## 19. Fresh-clone verification
+
+Per the doc §30, the repository was cloned into a fresh temporary
+directory and all checks were re-run from scratch:
+
+| Step | Command | Result |
+|---|---|---|
+| Clone | `gh repo clone witejackel-eng/dev-aditya-paperfolio-v2` | ✓ Success |
+| Install | `npm ci` | ✓ Success (497 packages) |
+| Lint | `npm run lint` | ✓ 0 errors, 5 warnings (pre-existing) |
+| Typecheck | `npm run typecheck` | ✓ Clean |
+| Test | `npm run test` | ✓ 38/38 pass |
+| Build | `NEXT_PUBLIC_SITE_URL=https://dev-aditya.com npm run build` | ✓ Compiled in 14.4s, 39 routes |
+| Excluded-content scan | `grep -rniE '<excluded-terms>' .` | ✓ 0 matches |
+| Secret scan (PAT) | `grep -rnE 'ghp_[A-Za-z0-9]{36}' .` | ✓ 0 matches |
+| Git identity audit | `git log --all --format='%an <%ae> | %cn <%ce>' \| sort -u` | ✓ Only `witejackel-eng <witejackel@gmail.com>` |
+| Working tree | `git status --short` | ✓ Clean |
+| Production domain | (no Vercel/DNS changes made) | ✓ `dev-aditya.com` untouched |
+| Existing repo | (read-only inspection only) | ✓ `witejackel-eng/dev-aditya.com` untouched |
+
+## 20. Verification of completion standard
 
 | Requirement | Status |
 |---|---|
